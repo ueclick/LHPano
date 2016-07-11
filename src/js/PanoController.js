@@ -12,7 +12,7 @@
 **/
 var PanoController = function ( object, domElement, startAngle) {
 
-	startAngle = startAngle || -90;
+	startAngle = startAngle || -90;  /// 初始角度
 
 	this.object = object;
 	this.element = domElement || document;
