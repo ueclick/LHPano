@@ -150,8 +150,6 @@ var PanoController = function ( object, domElement, startAngle) {
 		this.freeze = true;
 		isDown = true;
 
-		tmpQuat.copy( this.object.quaternion );
-
 		startX = currentX = event.pageX;
 		startY = currentY = event.pageY;
 
@@ -161,6 +159,7 @@ var PanoController = function ( object, domElement, startAngle) {
 
 		this.element.addEventListener( 'mousemove', this.onDocumentMouseMove, false );
 		this.element.addEventListener( 'mouseup', this.onDocumentMouseUp, false );
+		this.element.addEventListener( 'mouseleave', this.onDocumentMouseUp, false );
 
 		fireEvent( CONTROLLER_EVENT.MANUAL_CONTROL + 'start' );
 		fireEvent( CONTROLLER_EVENT.ROTATE_CONTROL + 'start' );
@@ -185,6 +184,7 @@ var PanoController = function ( object, domElement, startAngle) {
 	this.onDocumentMouseUp = function ( event ) {
 		this.element.removeEventListener( 'mousemove', this.onDocumentMouseMove, false );
 		this.element.removeEventListener( 'mouseup', this.onDocumentMouseUp, false );
+		this.element.removeEventListener( 'mouseleave', this.onDocumentMouseUp, false );
 
 		appState = CONTROLLER_STATE.AUTO;
 
@@ -204,7 +204,6 @@ var PanoController = function ( object, domElement, startAngle) {
 				if ( this.enableManualDrag !== true ) return;
 
 				appState = CONTROLLER_STATE.MANUAL_ROTATE;
-
 
 				this.freeze = true;
 				isDown = true;
@@ -242,6 +241,7 @@ var PanoController = function ( object, domElement, startAngle) {
 
 				this.element.addEventListener( 'touchmove', this.onDocumentTouchMove, false );
 				this.element.addEventListener( 'touchend', this.onDocumentTouchEnd, false );
+				this.element.addEventListener( 'touchcancel', this.onDocumentTouchEnd, false );
 
 				fireEvent( CONTROLLER_EVENT.MANUAL_CONTROL + 'start' );
 				fireEvent( CONTROLLER_EVENT.ZOOM_CONTROL + 'start' );
@@ -275,6 +275,7 @@ var PanoController = function ( object, domElement, startAngle) {
 	this.onDocumentTouchEnd = function ( event ) {
 		this.element.removeEventListener( 'touchmove', this.onDocumentTouchMove, false );
 		this.element.removeEventListener( 'touchend', this.onDocumentTouchEnd, false );
+		this.element.removeEventListener( 'touchcancel', this.onDocumentTouchEnd, false );
 
 		if ( appState === CONTROLLER_STATE.MANUAL_ROTATE ) {
 
@@ -431,7 +432,7 @@ var PanoController = function ( object, domElement, startAngle) {
 	};
 
 	this.resetController = function () {
-
+		drag.lon = drag.lat =0;
 	}
 
 	this.connect = function () {
