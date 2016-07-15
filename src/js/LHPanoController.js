@@ -1,32 +1,33 @@
 /**
  * -------
- * threeVR (https://github.com/richtr/threeVR)
+ * LHPanoController (https://github.com/ueclick/LHPano)
  * -------
  *
  * W3C Device Orientation control (http://www.w3.org/TR/orientation-event/)
  * with manual user drag (rotate) and pinch (zoom) override handling
  *
- * Author: Rich Tibbett (http://github.com/richtr)
+ * Author: Ueclick (https://github.com/ueclick)
  * License: The MIT License
  *
 **/
-var PanoController = function ( object, domElement, startAngle) {
 
-	startAngle = startAngle || -90;  /// 初始角度
+
+var LHPanoController = function ( object, domElement, startAngle) {
 
 	this.object = object;
 	this.element = domElement || document;
 
-	this.freeze = true;
+	this.freeze = true;           // stop all
+	this.isDown = false;
 
 	this.enableManualDrag = true; // enable manual user drag override control by default
 	this.enableManualZoom = true; // enable manual user zoom override control by default
-
-	this.useQuaternions = true; // use quaternions for orientation calculation by default
+	this.enableGyro = true;       // enable Gyro control
 
 	this.deviceOrientation = {};
 	this.screenOrientation = window.orientation || 0;
 
+	//detect device os
 	this.os = '';
 	if(!!navigator.userAgent.match(/\(i[^;]+;( U;)? CPU.+Mac OS X/)){
 			this.os = 'ios';
@@ -34,23 +35,23 @@ var PanoController = function ( object, domElement, startAngle) {
 			this.os = (navigator.userAgent.indexOf('Android') > -1 || navigator.userAgent.indexOf('Linux')) ? 'android' : '';
 	}
 
-
+	startAngle = startAngle || 0;  /// 初始角度
 	// Manual rotate override components
 	var startX = 0, startY = 0,
 	    currentX = 0, currentY = 0,
 	    scrollSpeedX, scrollSpeedY,
-	    tmpQuat = new THREE.Quaternion();
+			speedXFactor = 0.1, speedYFactor = 0.1;
 
 	// Manual zoom override components
 	var zoomStart = 1, zoomCurrent = 1,
 	    zoomP1 = new THREE.Vector2(),
 	    zoomP2 = new THREE.Vector2(),
-	    tmpFOV;
-	var zoomFactor = 0, minZoomFactor = 1,maxZoomFactor =0.3,tmpZoom = 1; // maxZoomFactor = Infinity
+	    zoomFactor = 0, minZoomFactor = 1,maxZoomFactor =0.3,tmpZoom = 1,
+			tmpFOV;
 
 	var CONTROLLER_STATE = {
 		AUTO: 0,
-		MANUAL_ROTATE: 1,
+		MANUAL_ROTATE: 1,   // drag
 		MANUAL_ZOOM: 2
 	};
 
@@ -69,10 +70,6 @@ var PanoController = function ( object, domElement, startAngle) {
 	    startFOVFrustrumHeight = 2000 * Math.tan( THREE.Math.degToRad( ( this.object.fov || 75 ) / 2 ) ),
 	    relativeFOVFrustrumHeight, relativeVerticalFOV;
 
-	var deviceQuat = new THREE.Quaternion();
-
-	// white ++
-	var isDown = false;
 	var camera = object;
 
 	var cameraRadius = 500;
@@ -80,9 +77,9 @@ var PanoController = function ( object, domElement, startAngle) {
 	var cameraMaxLat = 85;
 	var cameraLerp = 0.2;
 
-	var drag = {lon:startAngle, lat:0};  //拖动 经纬度
-	var fix  = {lon:0, lat:0};  //消除 误差
-	var gyro  = {lon:0, lat:0};  //陀螺仪 经纬度
+	var drag  = { lon:0, lat:0 };  //拖动 经纬度
+	var gyro  = { lon:0, lat:0 };           //陀螺仪 经纬度
+	var fix   = { lon:startAngle, lat:0 };           //消除 误差
 
 	// set camera target with lon & lat  经纬度
 	var setCameraByLatLon = function(){
@@ -100,9 +97,9 @@ var PanoController = function ( object, domElement, startAngle) {
 
 			camera.lookAt( cameraTarget );
 		};
-
 	}();
 
+	// simple event trigger
 	var fireEvent = function () {
 		var eventData;
 
@@ -116,6 +113,7 @@ var PanoController = function ( object, domElement, startAngle) {
 		}.bind( this );
 	}.bind( this )();
 
+  // dynamic set camera fov with screen height
 	this.constrainObjectFOV = function () {
 		relativeFOVFrustrumHeight = startFOVFrustrumHeight * ( window.innerHeight / startClientHeight );
 
@@ -140,6 +138,12 @@ var PanoController = function ( object, domElement, startAngle) {
 		fireEvent( CONTROLLER_EVENT.CALIBRATE_COMPASS );
 	}.bind( this );
 
+	/**
+	 * --------------------------------------------------------------------------
+	 * Userinteraction Events
+	 *
+	**/
+
 	this.onDocumentMouseDown = function ( event ) {
 		if ( this.enableManualDrag !== true ) return;
 
@@ -147,15 +151,15 @@ var PanoController = function ( object, domElement, startAngle) {
 
 		appState = CONTROLLER_STATE.MANUAL_ROTATE;
 
-		this.freeze = true;
-		isDown = true;
+		this.isDown = true;
 
 		startX = currentX = event.pageX;
 		startY = currentY = event.pageY;
 
+
 		// Set consistent scroll speed based on current viewport width/height
-		scrollSpeedX = ( 1200 / window.innerWidth ) * 0.2;
-		scrollSpeedY = ( 800 / window.innerHeight ) * 0.2;
+		scrollSpeedX = ( 1200 / window.innerWidth ) * speedXFactor;
+		scrollSpeedY = ( 800 / window.innerHeight ) * speedYFactor;
 
 		this.element.addEventListener( 'mousemove', this.onDocumentMouseMove, false );
 		this.element.addEventListener( 'mouseup', this.onDocumentMouseUp, false );
@@ -167,7 +171,7 @@ var PanoController = function ( object, domElement, startAngle) {
 
 	this.onDocumentMouseMove = function ( event ) {
 
-		if(isDown){
+		if(this.isDown){
 			var movex = event.pageX - currentX;
 			var movey = event.pageY - currentY;
 			drag.lon = (drag.lon - scrollSpeedX * event.movementX) % 360;
@@ -178,7 +182,6 @@ var PanoController = function ( object, domElement, startAngle) {
 		currentY = event.pageY;
 
 		// console.log(drag.lat);
-
 	}.bind( this );
 
 	this.onDocumentMouseUp = function ( event ) {
@@ -188,8 +191,7 @@ var PanoController = function ( object, domElement, startAngle) {
 
 		appState = CONTROLLER_STATE.AUTO;
 
-		this.freeze = false;
-		isDown = false;
+		this.isDown = false;
 
 		fireEvent( CONTROLLER_EVENT.MANUAL_CONTROL + 'end' );
 		fireEvent( CONTROLLER_EVENT.ROTATE_CONTROL + 'end' );
@@ -205,17 +207,14 @@ var PanoController = function ( object, domElement, startAngle) {
 
 				appState = CONTROLLER_STATE.MANUAL_ROTATE;
 
-				this.freeze = true;
-				isDown = true;
-
-				tmpQuat.copy( this.object.quaternion );
+				this.isDown = true;
 
 				startX = currentX = event.touches[ 0 ].pageX;
 				startY = currentY = event.touches[ 0 ].pageY;
 
 				// Set consistent scroll speed based on current viewport width/height
-				scrollSpeedX = ( 1200 / window.innerWidth ) * 0.1;
-				scrollSpeedY = ( 800 / window.innerHeight ) * 0.1;
+				scrollSpeedX = ( 1200 / window.innerWidth ) * speedXFactor;
+				scrollSpeedY = ( 800 / window.innerHeight ) * speedYFactor;
 
 				this.element.addEventListener( 'touchmove', this.onDocumentTouchMove, false );
 				this.element.addEventListener( 'touchend', this.onDocumentTouchEnd, false );
@@ -229,8 +228,6 @@ var PanoController = function ( object, domElement, startAngle) {
 				if ( this.enableManualZoom !== true ) return;
 
 				appState = CONTROLLER_STATE.MANUAL_ZOOM;
-
-				this.freeze = true;
 
 				tmpFOV = this.object.fov;
 
@@ -253,11 +250,11 @@ var PanoController = function ( object, domElement, startAngle) {
 	this.onDocumentTouchMove = function ( event ) {
 		switch( event.touches.length ) {
 			case 1:
-				if(isDown){
+				if(this.isDown){
 					var movex = event.touches[ 0 ].pageX - currentX;
 					var movey = event.touches[ 0 ].pageY - currentY;
 					drag.lon = (drag.lon - scrollSpeedX * movex) % 360;
-					drag.lat = Math.max(-cameraMaxLat, Math.min(cameraMaxLat, drag.lat + scrollSpeedY * movey));
+					drag.lat =  drag.lat + scrollSpeedY * movey;
 				}
 
 				currentX = event.touches[ 0 ].pageX;
@@ -281,8 +278,7 @@ var PanoController = function ( object, domElement, startAngle) {
 
 			appState = CONTROLLER_STATE.AUTO; // reset control state
 
-			this.freeze = false;
-			isDown = false;
+			this.isDown = false;
 
 			fireEvent( CONTROLLER_EVENT.MANUAL_CONTROL + 'end' );
 			fireEvent( CONTROLLER_EVENT.ROTATE_CONTROL + 'end' );
@@ -293,14 +289,18 @@ var PanoController = function ( object, domElement, startAngle) {
 
 			appState = CONTROLLER_STATE.AUTO; // reset control state
 
-			this.freeze = false;
-
 			fireEvent( CONTROLLER_EVENT.MANUAL_CONTROL + 'end' );
 			fireEvent( CONTROLLER_EVENT.ZOOM_CONTROL + 'end' );
 
 			tmpZoom = Math.min(zoomFactor,1);
 		}
 	}.bind( this );
+
+	/**
+	 * --------------------------------------------------------------------------
+	 * update Events
+	 *
+	**/
 
 	this.updateManualMove = function () {
 
@@ -319,7 +319,6 @@ var PanoController = function ( object, domElement, startAngle) {
 					this.object.fov = tmpFOV * zoomFactor;
 
 					this.object.updateProjectionMatrix();
-
 				}
 			}
 		};
@@ -328,94 +327,16 @@ var PanoController = function ( object, domElement, startAngle) {
 
 	this.updateDeviceMove = function () {
 
-		var alpha, beta, gamma, orient;
+			gyro = this.getDeviceLonLat();
+			gyro.lon = Math.round(gyro.lon);
+			gyro.lat = Math.round(gyro.lat);
 
-		return function () {
-
-			alpha  = this.deviceOrientation.alpha || 0; // Z
-			beta   = this.deviceOrientation.beta  || 0 ; // X'
-			gamma  = this.deviceOrientation.gamma || 0 ; // Y''
-			orient = this.screenOrientation       || 0 ; // O
-
-			// only process non-zero 3-axis data
-			if ( alpha !== 0 && beta !== 0 && gamma !== 0) {
-				switch (this.os) {
-						case 'ios':
-								switch (orient) {
-										case 0:
-												gyro.lon = alpha + gamma;
-												if (beta > 0) gyro.lat = beta - 90;
-												break;
-										case 90:
-												if (gamma < 0) {
-														gyro.lon = alpha - 90;
-												} else {
-														gyro.lon = alpha - 270;
-												}
-												if (gamma > 0) {
-															gyro.lat = 90 - gamma;
-												} else {
-															gyro.lat = -90 - gamma;
-												}
-												break;
-										case -90:
-												if (gamma < 0) {
-														gyro.lon = alpha - 90;
-												} else {
-														gyro.lon = alpha - 270;
-												}
-												if (gamma < 0) {
-															gyro.lat = 90 + gamma;
-												} else {
-															gyro.lat = -90 + gamma;
-												}
-												break;
-								}
-								break;
-						case 'android':
-								switch (orient) {
-										case 0:
-												gyro.lon = alpha + gamma + 30;
-												if (gamma > 90){
-															gyro.lat = 90 - beta;
-												}else{
-															gyro.lat = beta - 90;
-												}
-												break;
-										case 90:
-												gyro.lon = alpha - 230;
-												if (gamma > 0) {
-															gyro.lat = 270 - gamma;
-												} else {
-															gyro.lat = -90 - gamma;
-												}
-												break;
-										case -90:
-												gyro.lon = alpha - 180;
-												gyro.lat = -90 + gamma;
-												break;
-								}
-								break;
-				}
-
-				gyro.lon = -gyro.lon;
-				gyro.lon %= 360;
-				if (gyro.lon < 0) gyro.lon += 360;
-
-				gyro.lon = Math.round(gyro.lon);
-				gyro.lat = Math.round(gyro.lat);
-
-				if(gyro.lat + drag.lat>cameraMaxLat){
-					drag.lat = cameraMaxLat- gyro.lat;
-				}else if (gyro.lat + drag.lat<-cameraMaxLat){
-					drag.lat = -cameraMaxLat- gyro.lat;
-				}
-
-				// console.log(gyro.lon+","+gyro.lat);
+			if(gyro.lat + drag.lat + fix.lat > cameraMaxLat){
+				drag.lat = cameraMaxLat- gyro.lat - fix.lat;
+			}else if (gyro.lat + drag.lat + fix.lat < -cameraMaxLat){
+				drag.lat = -cameraMaxLat- gyro.lat - fix.lat;
 			}
-		};
-
-	}();
+	};
 
 	this.update = function () {
 		this.updateDeviceMove();
@@ -424,15 +345,96 @@ var PanoController = function ( object, domElement, startAngle) {
 			this.updateManualMove();
 		}
 
-		var lon = drag.lon + gyro.lon;
-		var lat = drag.lat + gyro.lat;
+		var lon = drag.lon + gyro.lon + fix.lon;
+		var lat = drag.lat + gyro.lat + fix.lat;
 
 		setCameraByLatLon(lon,lat);
-
 	};
 
 	this.resetController = function () {
 		drag.lon = drag.lat =0;
+	}
+
+	/**
+	 * [get device longitude and latitude width gyro]
+	 * @return {lon:0,lat:0}
+	 */
+	this.getDeviceLonLat = function() {
+		var alpha, beta, gamma, orient;
+		var lon=0, lat=0;
+
+		alpha  = this.deviceOrientation.alpha || 0 ; // Z
+		beta   = this.deviceOrientation.beta  || 0 ; // X'
+		gamma  = this.deviceOrientation.gamma || 0 ; // Y''
+		orient = this.screenOrientation       || 0 ; // O
+		// only process non-zero 3-axis data
+		if ( alpha !== 0 && beta !== 0 && gamma !== 0) {
+				switch (this.os) {
+						case 'ios':
+								switch (orient) {
+										case 0:
+												lon = alpha + gamma;
+												if (beta > 0) lat = beta - 90;
+												break;
+										case 90:
+												if (gamma < 0) {
+														lon = alpha - 90;
+												} else {
+														lon = alpha - 270;
+												}
+												if (gamma > 0) {
+															lat = 90 - gamma;
+												} else {
+															lat = -90 - gamma;
+												}
+												break;
+										case -90:
+												if (gamma < 0) {
+														lon = alpha - 90;
+												} else {
+														lon = alpha - 270;
+												}
+												if (gamma < 0) {
+															lat = 90 + gamma;
+												} else {
+															lat = -90 + gamma;
+												}
+												break;
+								}
+								break;
+						case 'android':
+								switch (orient) {
+										case 0:
+												lon = alpha + gamma + 30;
+												if (gamma > 90){
+															lat = 90 - beta;
+												}else{
+															lat = beta - 90;
+												}
+												break;
+										case 90:
+												lon = alpha - 230;
+												if (gamma > 0) {
+															lat = 270 - gamma;
+												} else {
+															lat = -90 - gamma;
+												}
+												break;
+										case -90:
+												lon = alpha - 180;
+												lat = -90 + gamma;
+												break;
+								}
+								break;
+				}
+
+				lon = -lon;
+				lon %= 360;
+				if (lon < 0) lon += 360;
+				console.log(lat);
+		}
+
+		return {lon:lon, lat:lat};
 	}
 
 	this.connect = function () {
@@ -465,4 +467,4 @@ var PanoController = function ( object, domElement, startAngle) {
 
 };
 
-PanoController.prototype = Object.create( THREE.EventDispatcher.prototype );
+LHPanoController.prototype = Object.create( THREE.EventDispatcher.prototype );

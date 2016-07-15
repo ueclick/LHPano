@@ -33,11 +33,13 @@
 	</head>
 	<body>
 		<script src="http://apps.bdimg.com/libs/jquery/2.1.4/jquery.min.js" type="text/javascript"></script>
-		<script src="../js/lib/three.min.js" type="text/javascript"></script>
+		<!-- <script src="../js/lib/three.min.js" type="text/javascript"></script> -->
+		<script src="../js/lib/three.js" type="text/javascript"></script>
 		<script src="../js/lib/CSS3DRenderer.js" type="text/javascript"></script>
 		<!-- <script src="../js/lib/inline-video.js" type="text/javascript"></script> -->
 
-		<script src="../js/PanoController.js" type="text/javascript"></script>
+		<script src="../js/LHPanoController.js" type="text/javascript"></script>
+		<script src="../js/LHPanoTool.js" type="text/javascript"></script>
 
 		<div id="extra">
 			<span id="controllername">Pano Control</span>
@@ -53,9 +55,11 @@
 
 			var camera, scene, renderer, controls;
 			var sphere;
+			var video, videoTexture;
+			var lastTime = new Date().getTime();
 			// Setup
 			function init() {
-				camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 1000 );
+				camera = new THREE.PerspectiveCamera( 90, window.innerWidth / window.innerHeight, 1, 1000 );
 
 				// Render three.js world
 
@@ -70,17 +74,28 @@
 				// sphere = generateSphereMap('../img/map2.jpg');
 				// scene.add( sphere );
 
-				sphere = generateVideoMap( '../media/video.mp4');
+				// sphere = generateVideoMap( '../media/video.mp4');
+				// scene.add( sphere );
+
+				// sphere = LHPanoTool.createSphereMap( '../img/map2.jpg');
+				// scene.add( sphere );
+
+				sphere = LHPanoTool.createCubeMap( '../img/textures/',["negx","posx","posy","negy","negz","posz"],"jpg");
 				scene.add( sphere );
 
+				// sphere = LHPanoTool.createVideoMap( '../media/video.mp4');
+				// scene.add( sphere );
+
+				// renderer = new THREE.WebGLRenderer();
 				renderer = new THREE.WebGLRenderer();
 				renderer.precision = "lowp";
+				renderer.setPixelRatio ( window.devicePixelRatio );
 				renderer.setSize( window.innerWidth, window.innerHeight );
 				document.body.appendChild( renderer.domElement );
 
 				// Add DeviceOrientation Controls
 
-				controls = new PanoController( camera, renderer.domElement );
+				controls = new LHPanoController( camera, renderer.domElement );
 				controls.connect();
 
 				setupControllerEventHandlers( controls );
@@ -93,7 +108,6 @@
 			function animate() {
 
 				controls.update();
-
 				renderer.render( scene, camera );
 
 				requestAnimationFrame( animate );
@@ -147,22 +161,36 @@
 				});
 			}
 
+			function videoTimeUpdate(event){
+				// console.log(new Date().getTime());
+				videoTexture.needsUpdate = true;
+			}
+
 			function generateVideoMap(url) {
-				var video = document.getElementById( 'video' );
+				video = document.getElementById( 'video' );
 			  video.autoplay = true;
 				// video.playsinline = false;
+				// video.setAttribute('webkit-playsinline', '');
 				video.src = url;
 			  video.loop = true;
 
-				var texture = new THREE.VideoTexture( video );
-			  texture.minFilter = THREE.LinearFilter;
-				texture.magFilter = THREE.LinearFilter;
-				texture.format = THREE.RGBFormat;
+				// video.
+				// video.addEventListener("timeupdate", videoTimeUpdate);
+				// video.play();
+				// document.ontouchstart = function(){
+				// 	alert("aaa");
+				// 	video.play();
+				// }
 
-				var material   = new THREE.MeshBasicMaterial( { map : texture ,side : THREE.FrontSide} );
 
-				var geometry = new THREE.SphereGeometry( 50, 60, 40 );
-      	geometry.scale( - 1, 1, 1 );
+				videoTexture = new THREE.VideoTexture( video );
+			  videoTexture.minFilter = THREE.LinearFilter;
+				videoTexture.magFilter = THREE.LinearFilter;
+				videoTexture.format = THREE.RGBFormat;
+
+				var material   = new THREE.MeshBasicMaterial( { map : videoTexture ,side : THREE.BackSide} );
+
+				var geometry = new THREE.SphereBufferGeometry( 50, 60, 40 );
 
       	var sphere = new THREE.Mesh( geometry, material );
 
@@ -172,10 +200,10 @@
 			function generateSphereMap (url) {
 				//mesh
         var geometry = new THREE.SphereGeometry( 50, 60, 40 );
-      	geometry.scale( - 1, 1, 1 );
+      	// geometry.scale( - 1, 1, 1 );
 
       	var material = new THREE.MeshBasicMaterial( {
-      	   map: THREE.ImageUtils.loadTexture( url )
+      	   map: THREE.ImageUtils.loadTexture( url ) ,side : THREE.BackSide
       	} );
 
       	var sphere = new THREE.Mesh( geometry, material );
